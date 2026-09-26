@@ -25,7 +25,7 @@ TOKENIZERS = [
 ]
 
 DEFAULT_SET = ["Clojure", "Julia", "Ruby", "Perl", "Python", "Haskell", "F#", "Lua", "Scala", "OCaml",
-               "PHP", "JavaScript", "Java", "Rust", "Go", "C#", "C++", "C"]
+               "PHP", "JavaScript", "Java", "Rust", "Go", "C#", "C++", "C", "Swift", "Objective-C", "TypeScript"]
 
 
 def load_counts(tok_id: str) -> dict[str, int] | None:

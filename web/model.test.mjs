@@ -18,7 +18,7 @@ const expected = {
   Scala: 148, OCaml: 158, PHP: 165, JavaScript: 185, Java: 191, Rust: 202, Go: 208, "C#": 215,
   "C++": 269, C: 294,
 };
-const setLangs = data.defaultSet;
+const setLangs = Object.keys(expected);
 const idxs = setLangs.map((l) => { assert.ok(li.has(l), `missing ${l}`); return li.get(l); });
 const common = commonTaskAverages(data, idxs, ["openai-o200k"], "first");
 assert.equal(common.tasks.length, 243);
