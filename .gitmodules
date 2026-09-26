@@ -1,0 +1,5 @@
+[submodule "data/RosettaCodeData"]
+	path = data/RosettaCodeData
+	url = https://github.com/acmeism/RosettaCodeData.git
+	shallow = true
+	ignore = untracked
