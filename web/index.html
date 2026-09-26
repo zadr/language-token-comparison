@@ -106,6 +106,9 @@ tbody tr.sel { background: var(--wash); box-shadow: inset 3px 0 0 var(--text-pri
 .inbar .ci { position: absolute; top: 5px; height: 2px; background: var(--text-muted); }
 .split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
 @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.detail-head h2 { margin: 0; }
+#detail-pick { width: 220px; }
 .detail-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 12px 0; }
 .detail-tiles .tile { padding: 10px 12px; }
 .detail-tiles .value { font-size: 20px; }
@@ -207,7 +210,10 @@ code { font-size: 12px; background: var(--wash); padding: 1px 4px; border-radius
   </section>
 
   <section class="card" id="detail">
-    <h2 id="detail-title">Language detail</h2>
+    <div class="detail-head">
+      <h2 id="detail-title">Language detail</h2>
+      <input type="text" id="detail-pick" list="lang-list" placeholder="Show another language" aria-label="Choose the language to show">
+    </div>
     <p class="lede" id="detail-lede">Select a language in the table or charts above.</p>
     <div class="detail-tiles" id="detail-tiles"></div>
     <div class="two">
@@ -366,11 +372,21 @@ $("primary").addEventListener("change", (e) => { state.primary = e.target.value;
 $("compare").addEventListener("change", (e) => { state.compare = e.target.value; renderAll(); });
 $("minTasks").addEventListener("change", (e) => { state.minTasks = Math.max(1, +e.target.value || 1); renderAll(); });
 $("rank-search").addEventListener("input", (e) => { state.search = e.target.value.trim().toLowerCase(); renderRanking(); });
-$("rep-add").addEventListener("change", (e) => {
-  const i = langIdxByName.get(e.target.value);
-  if (i !== undefined && !state.repSet.includes(i)) { state.repSet.push(i); renderReplication(); }
-  e.target.value = "";
-});
+const langIdxByLower = new Map(data.langs.map((n, i) => [n.toLowerCase(), i]));
+// Picking a suggestion fires input with inputType "insertReplacementText"; Safari fires change only on blur or Enter.
+function onLanguagePick(input, apply) {
+  const handle = (e) => {
+    if (e.type === "input" && e.inputType !== "insertReplacementText") return;
+    const i = langIdxByLower.get(input.value.trim().toLowerCase());
+    if (i === undefined) return;
+    input.value = "";
+    apply(i);
+  };
+  input.addEventListener("input", handle);
+  input.addEventListener("change", handle);
+}
+onLanguagePick($("rep-add"), (i) => { if (!state.repSet.includes(i)) { state.repSet.push(i); renderReplication(); } });
+onLanguagePick($("detail-pick"), (i) => select(i));
 document.querySelectorAll("[data-table-toggle]").forEach((b) => b.addEventListener("click", () => {
   const t = $(b.dataset.tableToggle); t.hidden = !t.hidden; b.textContent = t.hidden ? "Show table" : "Hide table";
 }));
