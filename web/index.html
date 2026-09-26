@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token efficiency of programming languages across tokenizers</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --wash: rgba(11,11,11,0.04);
+  --deemph: #c3c2b7;
+  --div-neg: #2a78d6;
+  --div-pos: #e34948;
+  --tok-1: #2a78d6; --tok-2: #eb6834; --tok-3: #1baf7a;
+  --tok-4: #eda100; --tok-5: #e87ba4; --tok-6: #008300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --text-muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --wash: rgba(255,255,255,0.05); --deemph: #52514e; --div-neg: #3987e5; --div-pos: #e66767;
+    --tok-1: #3987e5; --tok-2: #d95926; --tok-3: #199e70; --tok-4: #c98500; --tok-5: #d55181; --tok-6: #008300;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+  --text-muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --wash: rgba(255,255,255,0.05); --deemph: #52514e; --div-neg: #3987e5; --div-pos: #e66767;
+  --tok-1: #3987e5; --tok-2: #d95926; --tok-3: #199e70; --tok-4: #c98500; --tok-5: #d55181; --tok-6: #008300;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh; padding: 32px 24px 64px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0 0 6px; font-weight: 600; }
+h2 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+p { margin: 0 0 10px; }
+a { color: inherit; text-decoration-color: var(--axis); text-underline-offset: 2px; }
+.sub { color: var(--text-secondary); max-width: 820px; }
+.muted { color: var(--text-muted); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 20px; }
+.lede { color: var(--text-secondary); max-width: 860px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 20px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; line-height: 1.2; }
+.controls { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 16px; align-items: end;
+  background: var(--page); padding: 12px 0; border-bottom: 1px solid var(--border); margin-top: 20px; }
+.control { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+select, input[type=text], input[type=number], button {
+  font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+button { cursor: pointer; }
+button:hover { background: var(--wash); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button[aria-pressed=true] { background: var(--text-primary); color: var(--surface-1); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; }
+.chip button { border: 0; padding: 0 6px; background: none; color: var(--text-muted); font-size: 14px; line-height: 1; }
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px 20px; margin-top: 8px; }
+.panel-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.panel-title .key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.panel-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+svg { display: block; overflow: visible; }
+svg text { fill: var(--text-secondary); font-size: 11px; }
+svg .tick text { fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+svg .grid line { stroke: var(--grid); stroke-width: 1; }
+svg .baseline { stroke: var(--axis); stroke-width: 1; }
+svg .hit { fill: transparent; cursor: pointer; }
+svg .hit:hover + .mark, svg .hit:focus + .mark { opacity: .72; }
+svg .hit:focus { outline: none; }
+svg .row-label.sel { fill: var(--text-primary); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.legend i.line { height: 2px; width: 14px; border-radius: 1px; }
+.legend i.dot { border-radius: 50%; }
+.figure-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.tablewrap { max-height: 560px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+thead th { position: sticky; top: 0; background: var(--surface-1); font-weight: 600; color: var(--text-secondary); cursor: pointer; user-select: none; z-index: 1; }
+thead th[aria-sort=ascending]::after { content: " \2191"; }
+thead th[aria-sort=descending]::after { content: " \2193"; }
+td { font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--wash); }
+tbody tr.sel { background: var(--wash); box-shadow: inset 3px 0 0 var(--text-primary); }
+.bar-cell { width: 220px; }
+.inbar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.inbar .track { width: 140px; flex: none; height: 12px; position: relative; border-left: 1px solid var(--grid); border-right: 1px solid var(--grid); }
+.inbar .dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface-1); }
+.inbar .ci { position: absolute; top: 5px; height: 2px; background: var(--text-muted); }
+.split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.detail-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 12px 0; }
+.detail-tiles .tile { padding: 10px 12px; }
+.detail-tiles .value { font-size: 20px; }
+.detail-tiles .label { display: flex; align-items: center; gap: 6px; }
+.detail-tiles .label i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+.method li { margin-bottom: 6px; color: var(--text-secondary); }
+code { font-size: 12px; background: var(--wash); padding: 1px 4px; border-radius: 4px; }
+#tooltip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  display: none; max-width: 300px; }
+#tooltip .tt-title { color: var(--text-secondary); margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; align-items: center; gap: 8px; }
+#tooltip .tt-row b { font-variant-numeric: tabular-nums; }
+#tooltip .tt-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+  <header>
+    <h1>Token efficiency of programming languages across tokenizers</h1>
+    <p class="sub">Every solution in the <a href="https://github.com/acmeism/RosettaCodeData">RosettaCodeData</a> mirror of Rosetta Code,
+      <span data-fill="langs"></span> languages in all, counted with <span data-fill="toks"></span>.
+      Pipeline and page source are on <a href="https://github.com/zadr/language-token-comparison">GitHub</a>.</p>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="controls" role="group" aria-label="Filters">
+    <div class="control">Solution per task
+      <div class="seg" id="agg">
+        <button type="button" data-v="first" aria-pressed="true">First solution</button>
+        <button type="button" data-v="mean" aria-pressed="false">Mean of variants</button>
+      </div>
+    </div>
+    <label class="control">Ranking tokenizer <select id="primary"></select></label>
+    <label class="control">Compare with <select id="compare"></select></label>
+    <label class="control">Min. tasks per language <input id="minTasks" type="number" min="1" max="1500" step="10" value="100" style="width:90px"></label>
+    <div class="control" style="margin-left:auto">Theme
+      <div class="seg" id="theme">
+        <button type="button" data-v="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-v="light" aria-pressed="false">Light</button>
+        <button type="button" data-v="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="card" id="replication">
+    <h2>Average tokens over the tasks every selected language solves</h2>
+    <p class="lede" id="rep-lede"></p>
+    <div class="chips" id="rep-chips"></div>
+    <div class="chips">
+      <input type="text" id="rep-add" list="lang-list" placeholder="Add a language" aria-label="Add a language to the set">
+      <span class="muted" id="rep-count"></span>
+    </div>
+    <datalist id="lang-list"></datalist>
+    <div class="multiples" id="rep-multiples"></div>
+    <div class="legend" id="rep-legend"></div>
+    <div class="figure-foot">
+      <span class="muted">Panels share rows and x-scale. Rows are sorted by the ranking tokenizer.</span>
+      <button type="button" data-table-toggle="rep-table">Show table</button>
+    </div>
+    <div class="tablewrap" id="rep-table" hidden></div>
+  </section>
+
+  <section class="card" id="ranking">
+    <h2>Every language, adjusted for task difficulty</h2>
+    <p class="lede">No task is solved in all languages, so a plain average would reward languages that only solve easy tasks.
+      Each language gets a fixed-effects estimate instead: <code>log(tokens) = task effect + language effect</code>, fit over all task/language pairs.
+      The "typical task" column gives that estimate as a token count for a task of average difficulty. The ± value and whisker show one standard error. The dot track uses a log scale.
+      Click a row for details.</p>
+    <div class="chips">
+      <input type="text" id="rank-search" placeholder="Filter languages" aria-label="Filter languages">
+      <span class="muted" id="rank-count"></span>
+    </div>
+    <div class="tablewrap" id="rank-table"></div>
+  </section>
+
+  <section class="card" id="compare-sec">
+    <h2 id="cmp-title">Where the tokenizers disagree</h2>
+    <p class="lede" id="cmp-lede"></p>
+    <div class="split">
+      <figure style="margin:0">
+        <div id="cmp-scatter"></div>
+        <div class="legend" id="cmp-legend"></div>
+      </figure>
+      <figure style="margin:0">
+        <h3 id="cmp-div-title"></h3>
+        <div id="cmp-div"></div>
+      </figure>
+    </div>
+    <div class="figure-foot">
+      <span class="muted">Ratio = total tokens under the ranking tokenizer / total under the compared tokenizer, over all of a language's solutions.</span>
+      <button type="button" data-table-toggle="cmp-table">Show table</button>
+    </div>
+    <div class="tablewrap" id="cmp-table" hidden></div>
+  </section>
+
+  <section class="card" id="detail">
+    <h2 id="detail-title">Language detail</h2>
+    <p class="lede" id="detail-lede">Select a language in the table or charts above.</p>
+    <div class="detail-tiles" id="detail-tiles"></div>
+    <div class="two">
+      <div><h3>Most concise tasks, relative to other languages</h3><p class="muted">Solutions under 10 tokens are left out of these lists.</p><div class="tablewrap" id="detail-best" style="max-height:340px"></div></div>
+      <div><h3>Most verbose tasks, relative to other languages</h3><div class="tablewrap" id="detail-worst" style="max-height:340px"></div></div>
+    </div>
+  </section>
+
+  <section class="card method">
+    <h2>Method</h2>
+    <ul id="method-list"></ul>
+  </section>
+</div>
+<div id="tooltip" role="tooltip"></div>
+</div>
+<script id="data" type="application/octet-stream">__DATA_GZ_B64__</script>
+<script type="module">
+/*__MODEL_JS__*/
+
+const NS = "http://www.w3.org/2000/svg";
+const $ = (id) => document.getElementById(id);
+const fmt0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const fmt1 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const fmt2 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+const pct = (x) => (x >= 0 ? "+" : "") + fmt1.format(x * 100) + "%";
+
+function el(tag, attrs = {}, parent) {
+  const svg = ["svg", "g", "rect", "line", "text", "circle", "path", "title"].includes(tag);
+  const e = svg ? document.createElementNS(NS, tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") e.textContent = v;
+    else if (k === "class") e.setAttribute("class", v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function niceTicks(max, count = 4) {
+  const raw = max / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+  const n = Math.max(1, Math.ceil(max / step - 1e-9));
+  return Array.from({ length: n + 1 }, (_, i) => i * step);
+}
+
+function logTicks(min, max) {
+  const out = [];
+  for (let e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++) {
+    for (const m of [1, 2, 5]) {
+      const v = m * 10 ** e;
+      if (v >= min * 0.999 && v <= max * 1.001) out.push(v);
+    }
+  }
+  return out;
+}
+
+function pixelSvg(container, H, label) {
+  const W = Math.max(240, Math.floor(container.getBoundingClientRect().width));
+  return [el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": label }, container), W];
+}
+const stepFormat = (step) => {
+  const d = step >= 1 ? 0 : (String(+step.toPrecision(2)).split(".")[1] || "").length;
+  return (v) => v.toFixed(d);
+};
+
+const truncate = (s, n = 16) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+// Tooltip ------------------------------------------------------------------
+const tip = $("tooltip");
+function showTip(evt, title, rows) {
+  tip.replaceChildren();
+  el("div", { class: "tt-title", text: title }, tip);
+  for (const r of rows) {
+    const row = el("div", { class: "tt-row" }, tip);
+    if (r.color) el("span", { class: "tt-key", style: `background:${r.color}` }, row);
+    el("b", { text: r.value }, row);
+    el("span", { class: "muted", text: r.label }, row);
+  }
+  tip.style.display = "block";
+  let x, y;
+  if (evt.clientX !== undefined && evt.type !== "focus") { x = evt.clientX; y = evt.clientY; }
+  else { const b = evt.target.getBoundingClientRect(); x = b.right; y = b.top; }
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x + 14, innerWidth - w - 8) + "px";
+  tip.style.top = Math.max(8, Math.min(y + 14, innerHeight - h - 8)) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+function bindTip(node, fn) {
+  node.setAttribute("tabindex", "0");
+  node.addEventListener("pointermove", (e) => { const [t, r] = fn(); showTip(e, t, r); });
+  node.addEventListener("focus", (e) => { const [t, r] = fn(); showTip(e, t, r); });
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("blur", hideTip);
+}
+
+// Data & caches ------------------------------------------------------------
+const data = await decodeData($("data").textContent.trim());
+const TOKS = data.tokenizers;
+const AVAIL = TOKS.filter((t) => t.available);
+const tokById = Object.fromEntries(TOKS.map((t, i) => [t.id, { ...t, slot: i + 1 }]));
+const tokColor = (id) => `var(--tok-${tokById[id].slot})`;
+const tokName = (id) => `${tokById[id].vendor} ${tokById[id].label}`;
+const langIdxByName = new Map(data.langs.map((n, i) => [n, i]));
+const idx = langIndex(data);
+const DEFAULT_SET = data.defaultSet.map((n) => langIdxByName.get(n)).filter((i) => i !== undefined);
+
+const cache = new Map();
+function memo(key, fn) { if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); }
+const vals = (tok, agg) => memo(`v:${tok}:${agg}`, () => pairValues(data, tok, agg));
+const fit = (tok, agg) => memo(`f:${tok}:${agg}`, () => fitFixedEffects(data, vals(tok, agg)));
+const ratio = (a, b, agg) => memo(`r:${a}:${b}:${agg}`, () => ratioByLang(data, vals(a, agg), vals(b, agg)));
+const cpt = (tok, agg) => memo(`c:${tok}:${agg}`, () => ratioByLang(data, vals(tok, agg), vals("chars", agg)));
+
+const state = {
+  agg: "first",
+  primary: AVAIL[0].id,
+  compare: (AVAIL.find((t) => t.vendor !== AVAIL[0].vendor) || AVAIL[1] || AVAIL[0]).id,
+  minTasks: 100,
+  repSet: [...DEFAULT_SET],
+  search: "",
+  sortKey: "primary",
+  sortDir: 1,
+  selected: langIdxByName.get("Python"),
+};
+
+// Header -------------------------------------------------------------------
+document.querySelectorAll('[data-fill="langs"]').forEach((n) => (n.textContent = fmt0.format(data.langs.length)));
+document.querySelectorAll('[data-fill="toks"]').forEach((n) => (n.textContent =
+  new Intl.ListFormat("en", { type: "conjunction" }).format(AVAIL.map((t) => `${tokName(t.id)} (${t.covers})`))));
+(function tiles() {
+  const t = $("tiles");
+  const items = [
+    ["Languages", fmt0.format(data.langs.length)],
+    ["Tasks", fmt0.format(data.tasks.length)],
+    ["Solutions", fmt0.format(data.meta.files)],
+    ["Task/language pairs", fmt0.format(data.meta.pairs)],
+    ["Tokenizers", fmt0.format(AVAIL.length)],
+  ];
+  for (const [label, value] of items) {
+    const d = el("div", { class: "tile" }, t);
+    el("div", { class: "label", text: label }, d);
+    el("div", { class: "value", text: value }, d);
+  }
+})();
+
+// Controls -----------------------------------------------------------------
+function fillSelect(sel, value) {
+  sel.replaceChildren();
+  for (const t of AVAIL) el("option", { value: t.id, text: tokName(t.id) }, sel);
+  sel.value = value;
+}
+fillSelect($("primary"), state.primary);
+fillSelect($("compare"), state.compare);
+for (const n of data.langs) el("option", { value: n }, $("lang-list"));
+
+function segment(id, onChange) {
+  const root = $(id);
+  root.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    root.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    onChange(b.dataset.v);
+  });
+}
+segment("agg", (v) => { state.agg = v; renderAll(); });
+segment("theme", (v) => {
+  if (v === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", v);
+});
+$("primary").addEventListener("change", (e) => { state.primary = e.target.value; state.sortKey = "primary"; state.sortDir = 1; renderAll(); });
+$("compare").addEventListener("change", (e) => { state.compare = e.target.value; renderAll(); });
+$("minTasks").addEventListener("change", (e) => { state.minTasks = Math.max(1, +e.target.value || 1); renderAll(); });
+$("rank-search").addEventListener("input", (e) => { state.search = e.target.value.trim().toLowerCase(); renderRanking(); });
+$("rep-add").addEventListener("change", (e) => {
+  const i = langIdxByName.get(e.target.value);
+  if (i !== undefined && !state.repSet.includes(i)) { state.repSet.push(i); renderReplication(); }
+  e.target.value = "";
+});
+document.querySelectorAll("[data-table-toggle]").forEach((b) => b.addEventListener("click", () => {
+  const t = $(b.dataset.tableToggle); t.hidden = !t.hidden; b.textContent = t.hidden ? "Show table" : "Hide table";
+}));
+
+function select(li) {
+  state.selected = li;
+  renderRanking(); renderCompare(); renderDetail();
+}
+
+function makeTable(container, columns, rows, opts = {}) {
+  container.replaceChildren();
+  const table = el("table", {}, container);
+  const tr = el("tr", {}, el("thead", {}, table));
+  for (const c of columns) {
+    const th = el("th", { class: c.align === "l" ? "l" : "", text: c.label, scope: "col" }, tr);
+    if (c.key && opts.sortKey === c.key) th.setAttribute("aria-sort", opts.sortDir > 0 ? "ascending" : "descending");
+    if (opts.onSort && c.key) th.addEventListener("click", () => opts.onSort(c.key));
+  }
+  const tb = el("tbody", {}, table);
+  for (const r of rows) {
+    const row = el("tr", {}, tb);
+    if (opts.selected !== undefined && r.li === opts.selected) row.className = "sel";
+    if (opts.onRow) row.addEventListener("click", () => opts.onRow(r));
+    for (const c of columns) {
+      const td = el("td", { class: c.align === "l" ? "l" : "" }, row);
+      const v = c.get(r);
+      if (v instanceof Node) td.appendChild(v); else td.textContent = v;
+    }
+  }
+  return table;
+}
+
+// Section 1: common-task averages ------------------------------------------
+function renderReplication() {
+  const langs = state.repSet;
+  const toks = AVAIL.map((t) => t.id);
+  const chips = $("rep-chips"); chips.replaceChildren();
+  for (const li of langs) {
+    const c = el("span", { class: "chip" }, chips);
+    el("span", { text: data.langs[li] }, c);
+    const x = el("button", { type: "button", "aria-label": `Remove ${data.langs[li]}`, text: "×" }, c);
+    x.addEventListener("click", () => { state.repSet = state.repSet.filter((v) => v !== li); renderReplication(); });
+  }
+  const res = commonTaskAverages(data, langs, toks, state.agg);
+  const nTasks = res.tasks.length;
+  $("rep-count").textContent = `${fmt0.format(nTasks)} tasks solved by all ${langs.length} languages` +
+    (nTasks < 30 ? ". Too few for a stable comparison" : "");
+  $("rep-lede").textContent =
+    "Only tasks solved in every selected language count, so each language is measured on the same work. " +
+    "Adding a language shrinks the common task set.";
+
+  const multiples = $("rep-multiples"); multiples.replaceChildren();
+  $("rep-legend").replaceChildren();
+  if (!nTasks || !langs.length) { multiples.textContent = "No tasks are shared by every language in the set."; $("rep-table").replaceChildren(); return; }
+
+  const prim = res.avg[state.primary] ? state.primary : toks[0];
+  const order = langs.map((li, k) => k).sort((a, b) => res.avg[prim][a] - res.avg[prim][b]);
+  const max = Math.max(...toks.flatMap((t) => [...res.avg[t]]));
+  const ticks = niceTicks(max, 3);
+  const xMax = ticks[ticks.length - 1];
+  const rowH = 20, top = 4, left = 96, right = 36;
+  const H = top + order.length * rowH + 22;
+
+  const panels = toks.map((t) => {
+    const panel = el("div", {}, multiples);
+    const title = el("div", { class: "panel-title" }, panel);
+    el("span", { class: "key", style: `background:${tokColor(t)}` }, title);
+    el("span", { text: tokName(t) }, title);
+    el("div", { class: "panel-sub", text: tokById[t].covers }, panel);
+    return panel;
+  });
+  toks.forEach((t, pi) => {
+    const panel = panels[pi];
+    const [svg, W] = pixelSvg(panel, H, `Average tokens per task, ${tokName(t)}`);
+    const x = (v) => left + (v / xMax) * (W - left - right);
+    const g = el("g", { class: "grid" }, svg);
+    for (const v of ticks) {
+      el("line", { x1: x(v), x2: x(v), y1: top, y2: H - 20 }, g);
+      el("text", { x: x(v), y: H - 6, "text-anchor": "middle", text: fmt0.format(v) }, el("g", { class: "tick" }, svg));
+    }
+    el("line", { class: "baseline", x1: x(0), x2: x(0), y1: top, y2: H - 20 }, svg);
+    order.forEach((k, row) => {
+      const li = langs[k];
+      const v = res.avg[t][k];
+      const y = top + row * rowH;
+      el("text", { class: "row-label" + (li === state.selected ? " sel" : ""), x: left - 8, y: y + rowH / 2 + 4, "text-anchor": "end", text: truncate(data.langs[li], 15) }, svg);
+      const hit = el("rect", { class: "hit", x: 0, y, width: W, height: rowH, "aria-label": `${data.langs[li]}: ${fmt0.format(v)} tokens` }, svg);
+      const bw = Math.max(1, x(v) - x(0));
+      const bh = 10, by = y + (rowH - bh) / 2;
+      const r = Math.min(4, bw / 2);
+      el("path", { class: "mark", fill: tokColor(t),
+        d: `M${x(0)},${by}H${x(0) + bw - r}a${r},${r} 0 0 1 ${r},${r}V${by + bh - r}a${r},${r} 0 0 1 -${r},${r}H${x(0)}Z` }, svg);
+      if (row === 0 || row === order.length - 1) {
+        el("text", { x: x(v) + 4, y: y + rowH / 2 + 4, text: fmt0.format(v) }, svg);
+      }
+      bindTip(hit, () => [data.langs[li], toks.map((tt) => ({
+        color: tokColor(tt), value: fmt0.format(res.avg[tt][k]), label: tokName(tt) }))]);
+      hit.addEventListener("click", () => select(li));
+    });
+  });
+  el("span", { text: `Average over ${fmt0.format(nTasks)} common tasks. Values label the shortest and longest bar; hover for the rest.` }, $("rep-legend"));
+
+  makeTable($("rep-table"), [
+    { label: "Language", align: "l", get: (k) => data.langs[langs[k]] },
+    ...toks.map((t) => ({ label: tokName(t), get: (k) => fmt1.format(res.avg[t][k]) })),
+  ], order);
+}
+
+// Section 2: ranking table ----------------------------------------------------
+function rankRows() {
+  const f = fit(state.primary, state.agg);
+  const rows = [];
+  for (let li = 0; li < data.langs.length; li++) {
+    if (f.n[li] < state.minTasks) continue;
+    rows.push({ li, n: f.n[li], primary: f.typical[li], se: f.se[li] });
+  }
+  rows.sort((a, b) => a.primary - b.primary);
+  rows.forEach((r, i) => (r.rank = i + 1));
+  return rows;
+}
+
+function renderRanking() {
+  const rows = rankRows();
+  const others = AVAIL.map((t) => t.id).filter((t) => t !== state.primary);
+  const fits = Object.fromEntries(others.map((t) => [t, fit(t, state.agg)]));
+  const naive = memo(`n:${state.primary}:${state.agg}`, () => naiveMean(data, vals(state.primary, state.agg)));
+  const cp = cpt(state.primary, state.agg);
+  const byLang = new Map(rows.map((r) => [r.li, r]));
+  const rankIn = Object.fromEntries(others.map((t) => {
+    const order = rows.map((r) => r.li).sort((a, b) => fits[t].typical[a] - fits[t].typical[b]);
+    return [t, new Map(order.map((li, i) => [li, i + 1]))];
+  }));
+  for (const r of rows) {
+    for (const t of others) { r[t] = fits[t].typical[r.li]; r[`rank:${t}`] = rankIn[t].get(r.li); }
+    r.naive = naive[r.li]; r.cpt = cp[r.li]; r.name = data.langs[r.li];
+  }
+  const lo = Math.min(...rows.map((r) => r.primary)) * 0.9, hi = Math.max(...rows.map((r) => r.primary)) * 1.1;
+  const pos = (v) => (Math.log(Math.min(hi, Math.max(lo, v)) / lo) / Math.log(hi / lo)) * 100;
+  const filtered = rows.filter((r) => !state.search || r.name.toLowerCase().includes(state.search));
+  const key = state.sortKey;
+  filtered.sort((a, b) => {
+    const va = a[key], vb = b[key];
+    return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * state.sortDir;
+  });
+  $("rank-count").textContent = `${fmt0.format(filtered.length)} of ${fmt0.format(rows.length)} languages with at least ${fmt0.format(state.minTasks)} tasks`;
+
+  const bar = (r) => {
+    const wrap = el("div", { class: "inbar" });
+    el("span", { text: fmt0.format(r.primary) + (Number.isFinite(r.se) ? ` ±${fmt0.format(r.primary * (Math.exp(r.se) - 1))}` : "") }, wrap);
+    const track = el("div", { class: "track", title: `log scale, ${fmt0.format(lo)} to ${fmt0.format(hi)}` }, wrap);
+    if (Number.isFinite(r.se)) {
+      const a = pos(r.primary * Math.exp(-r.se)), b = pos(r.primary * Math.exp(r.se));
+      el("div", { class: "ci", style: `left:${a}%;width:${b - a}%` }, track);
+    }
+    el("div", { class: "dot", style: `left:${pos(r.primary)}%;background:${tokColor(state.primary)}` }, track);
+    return wrap;
+  };
+  const columns = [
+    { key: "rank", label: "#", get: (r) => r.rank },
+    { key: "name", label: "Language", align: "l", get: (r) => r.name },
+    { key: "n", label: "Tasks", get: (r) => fmt0.format(r.n) },
+    { key: "primary", label: `${tokName(state.primary)}: typical task`, get: bar },
+    ...others.map((t) => ({ key: t, label: tokName(t), get: (r) => `${fmt0.format(r[t])} (#${r[`rank:${t}`]})` })),
+    { key: "cpt", label: "Chars per token", get: (r) => fmt2.format(r.cpt) },
+    { key: "naive", label: "Plain mean", get: (r) => fmt0.format(r.naive) },
+  ];
+  const t = makeTable($("rank-table"), columns, filtered, {
+    sortKey: key, sortDir: state.sortDir, selected: state.selected,
+    onSort: (k) => { if (state.sortKey === k) state.sortDir *= -1; else { state.sortKey = k; state.sortDir = 1; } renderRanking(); },
+    onRow: (r) => select(r.li),
+  });
+  t.querySelectorAll("thead th")[3].classList.add("bar-cell");
+  const selRow = t.querySelector("tr.sel");
+  if (selRow && state._scrollSel) { selRow.scrollIntoView({ block: "nearest" }); state._scrollSel = false; }
+}
+
+// Section 3: tokenizer comparison ---------------------------------------------
+function renderCompare() {
+  const A = state.primary, B = state.compare;
+  const f = fit(A, state.agg);
+  const rat = ratio(B, A, state.agg);
+  const sA = vals(A, state.agg).reduce((s, v) => s + v, 0);
+  const sB = vals(B, state.agg).reduce((s, v) => s + v, 0);
+  const pooled = sA / sB;
+  const pts = [];
+  for (let li = 0; li < data.langs.length; li++) if (f.n[li] >= state.minTasks) pts.push({ li, x: f.typical[li], y: rat[li], name: data.langs[li] });
+
+  $("cmp-title").textContent = `Where ${tokName(A)} and ${tokName(B)} disagree`;
+  $("cmp-lede").textContent = A === B
+    ? "Choose a different tokenizer under “Compare with”."
+    : `Over all solutions, ${tokName(A)} uses ${fmt2.format(pooled)}× the tokens of ${tokName(B)}. ` +
+      `Languages above the line cost relatively more under ${tokName(A)}, and languages below it cost relatively less.`;
+
+  // Scatter
+  const box = $("cmp-scatter"); box.replaceChildren();
+  const H = 400, m = { l: 56, r: 16, t: 12, b: 40 };
+  const [svg, W] = pixelSvg(box, H, "Scatter of typical tokens against tokenizer ratio");
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const xMin = Math.min(...xs) * 0.9, xMax = Math.max(...xs) * 1.1;
+  const yPad = (Math.max(...ys) - Math.min(...ys)) * 0.06 || 0.05;
+  const yMin = Math.min(...ys, pooled) - yPad, yMax = Math.max(...ys, pooled) + yPad;
+  const x = (v) => m.l + (Math.log(v / xMin) / Math.log(xMax / xMin)) * (W - m.l - m.r);
+  const y = (v) => H - m.b - ((v - yMin) / (yMax - yMin)) * (H - m.t - m.b);
+  const g = el("g", { class: "grid" }, svg);
+  const tg = el("g", { class: "tick" }, svg);
+  for (const v of logTicks(xMin, xMax)) {
+    el("line", { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b }, g);
+    el("text", { x: x(v), y: H - m.b + 16, "text-anchor": "middle", text: fmt0.format(v) }, tg);
+  }
+  const yStep = niceTicks(yMax - yMin, 5)[1] || 0.05;
+  const yFmt = stepFormat(yStep);
+  for (let i = Math.ceil(yMin / yStep); i * yStep <= yMax; i++) {
+    const v = i * yStep;
+    el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }, g);
+    el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end", text: yFmt(v) }, tg);
+  }
+  el("text", { x: (m.l + W - m.r) / 2, y: H - 4, "text-anchor": "middle", text: `Typical-task tokens, ${tokName(A)} (log scale)` }, svg);
+  el("text", { x: 12, y: (m.t + H - m.b) / 2, transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})`, "text-anchor": "middle", text: `Ratio ${tokById[A].label} / ${tokById[B].label}` }, svg);
+  el("line", { x1: m.l, x2: W - m.r, y1: y(pooled), y2: y(pooled), stroke: "var(--text-muted)", "stroke-width": 1 }, svg);
+  el("text", { x: W - m.r, y: y(pooled) - 5, "text-anchor": "end", text: `all languages: ${fmt2.format(pooled)}` }, svg);
+
+  const inSet = new Set(state.repSet);
+  const isSet = (p) => inSet.has(p.li);
+  const drawOrder = [...pts].sort((a, b) => isSet(a) - isSet(b) || (a.li === state.selected) - (b.li === state.selected));
+  for (const p of drawOrder) {
+    const sel = p.li === state.selected;
+    el("circle", { cx: x(p.x), cy: y(p.y), r: sel ? 6 : 4,
+      fill: sel ? "var(--text-primary)" : isSet(p) ? tokColor(B) : "var(--deemph)",
+      stroke: "var(--surface-1)", "stroke-width": 2 }, svg);
+  }
+  const extremes = [...pts].sort((a, b) => a.y - b.y);
+  const labelled = new Set([...extremes.slice(0, 3), ...extremes.slice(-3)].map((p) => p.li));
+  if (state.selected !== undefined) labelled.add(state.selected);
+  for (const p of pts) {
+    if (!labelled.has(p.li)) continue;
+    const px = x(p.x), right = px > W - 140;
+    el("text", { x: px + (right ? -8 : 8), y: y(p.y) + 4, "text-anchor": right ? "end" : "start",
+      style: p.li === state.selected ? "fill:var(--text-primary);font-weight:600" : "", text: p.name }, svg);
+  }
+  const overlay = el("rect", { class: "hit", x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, tabindex: "0",
+    "aria-label": "Hover to inspect languages" }, svg);
+  let hover = null;
+  const nearest = (evt) => {
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    let best = null, bd = Infinity;
+    for (const p of pts) { const d = (x(p.x) - loc.x) ** 2 + (y(p.y) - loc.y) ** 2; if (d < bd) { bd = d; best = p; } }
+    return bd < 30 ** 2 ? best : null;
+  };
+  const ring = el("circle", { r: 8, fill: "none", stroke: "var(--text-primary)", "stroke-width": 1.5, "pointer-events": "none", style: "display:none" }, svg);
+  overlay.addEventListener("pointermove", (e) => {
+    hover = nearest(e);
+    if (!hover) { ring.style.display = "none"; hideTip(); overlay.style.cursor = "default"; return; }
+    overlay.style.cursor = "pointer";
+    ring.setAttribute("cx", x(hover.x)); ring.setAttribute("cy", y(hover.y)); ring.style.display = "";
+    showTip(e, hover.name, [
+      { value: fmt0.format(hover.x), label: `typical tokens, ${tokName(A)}`, color: tokColor(A) },
+      { value: fmt0.format(fit(B, state.agg).typical[hover.li]), label: `typical tokens, ${tokName(B)}`, color: tokColor(B) },
+      { value: fmt2.format(hover.y) + "×", label: `${tokById[A].label} / ${tokById[B].label} (${pct(hover.y / pooled - 1)} vs all)` },
+      { value: fmt0.format(f.n[hover.li]), label: "tasks" },
+    ]);
+  });
+  overlay.addEventListener("pointerleave", () => { ring.style.display = "none"; hideTip(); });
+  overlay.addEventListener("click", () => { if (hover) { state._scrollSel = true; select(hover.li); } });
+
+  const lg = $("cmp-legend"); lg.replaceChildren();
+  for (const [c, label] of [[tokColor(B), "Languages in the comparison set above"], ["var(--deemph)", "Other languages"], ["var(--text-primary)", "Selected language"]]) {
+    const s = el("span", {}, lg); el("i", { class: "dot", style: `background:${c}` }, s); el("span", { text: label }, s);
+  }
+
+  // Diverging extremes
+  const rel = pts.map((p) => ({ ...p, d: p.y / pooled - 1 })).sort((a, b) => a.d - b.d);
+  const k = Math.min(10, Math.floor(rel.length / 2));
+  const list = [...rel.slice(-k).reverse(), ...rel.slice(0, k).reverse()];
+  $("cmp-div-title").textContent = `Largest deviations from the ${fmt2.format(pooled)}× average`;
+  const dbox = $("cmp-div"); dbox.replaceChildren();
+  const rowH = 18, left = 118, labelRoom = 52, headH = 22, DH = list.length * rowH + 2 * headH + 8;
+  const [dsvg, DW] = pixelSvg(dbox, DH, "Languages with the largest tokenizer ratio deviation");
+  const dmax = Math.max(...list.map((p) => Math.abs(p.d)), 0.01);
+  const half = (DW - left - 2 * labelRoom) / 2;
+  const cx = left + labelRoom + half;
+  const dx = (v) => cx + (v / dmax) * half;
+  const rowY = (i) => headH + i * rowH + (i >= k ? headH + 8 : 0);
+  el("text", { x: 0, y: 14, style: "fill:var(--text-primary);font-weight:600", text: `Relatively more tokens under ${tokById[A].label}` }, dsvg);
+  el("text", { x: 0, y: rowY(k) - 8, style: "fill:var(--text-primary);font-weight:600", text: `Relatively fewer tokens under ${tokById[A].label}` }, dsvg);
+  el("line", { class: "baseline", x1: cx, x2: cx, y1: headH, y2: DH }, dsvg);
+  list.forEach((p, i) => {
+    const yy = rowY(i);
+    el("text", { class: "row-label" + (p.li === state.selected ? " sel" : ""), x: left - 8, y: yy + rowH / 2 + 4, "text-anchor": "end", text: truncate(p.name, 18) }, dsvg);
+    const hit = el("rect", { class: "hit", x: 0, y: yy, width: DW, height: rowH, "aria-label": `${p.name}: ${pct(p.d)}` }, dsvg);
+    const x0 = Math.min(dx(0), dx(p.d)), w = Math.max(1, Math.abs(dx(p.d) - dx(0)));
+    const r = Math.min(4, w / 2), bh = 10, by = yy + (rowH - bh) / 2;
+    const d = p.d >= 0
+      ? `M${x0},${by}H${x0 + w - r}a${r},${r} 0 0 1 ${r},${r}V${by + bh - r}a${r},${r} 0 0 1 -${r},${r}H${x0}Z`
+      : `M${x0 + w},${by}H${x0 + r}a${r},${r} 0 0 0 -${r},${r}V${by + bh - r}a${r},${r} 0 0 0 ${r},${r}H${x0 + w}Z`;
+    el("path", { class: "mark", d, fill: p.d >= 0 ? "var(--div-pos)" : "var(--div-neg)" }, dsvg);
+    el("text", { x: p.d >= 0 ? dx(p.d) + 4 : dx(p.d) - 4, y: yy + rowH / 2 + 4, "text-anchor": p.d >= 0 ? "start" : "end", text: pct(p.d) }, dsvg);
+    bindTip(hit, () => [p.name, [
+      { value: fmt2.format(p.y) + "×", label: `${tokById[A].label} / ${tokById[B].label}` },
+      { value: pct(p.d), label: "vs all-language ratio" },
+    ]]);
+    hit.addEventListener("click", () => { state._scrollSel = true; select(p.li); });
+  });
+
+  makeTable($("cmp-table"), [
+    { label: "Language", align: "l", get: (p) => p.name },
+    { label: "Tasks", get: (p) => fmt0.format(f.n[p.li]) },
+    { label: `Typical, ${tokName(A)}`, get: (p) => fmt0.format(p.x) },
+    { label: `Typical, ${tokName(B)}`, get: (p) => fmt0.format(fit(B, state.agg).typical[p.li]) },
+    { label: "Ratio", get: (p) => fmt2.format(p.y) },
+    { label: "vs all", get: (p) => pct(p.y / pooled - 1) },
+  ], [...pts].sort((a, b) => b.y - a.y));
+}
+
+// Section 4: language detail ----------------------------------------------------
+function renderDetail() {
+  const li = state.selected;
+  if (li === undefined) return;
+  const name = data.langs[li];
+  $("detail-title").textContent = name;
+  const f = fit(state.primary, state.agg);
+  const rows = rankRows();
+  const rank = rows.find((r) => r.li === li)?.rank;
+  $("detail-lede").textContent = `${fmt0.format(idx.nTasks[li])} tasks. ` +
+    (rank ? `Rank ${rank} of ${rows.length} under ${tokName(state.primary)} (languages with at least ${state.minTasks} tasks).`
+          : `Below the ${state.minTasks}-task threshold, so it is not ranked. Estimates for small samples are noisy.`);
+  const tiles = $("detail-tiles"); tiles.replaceChildren();
+  for (const t of AVAIL) {
+    const ft = fit(t.id, state.agg);
+    const d = el("div", { class: "tile" }, tiles);
+    const lab = el("div", { class: "label" }, d);
+    el("i", { style: `background:${tokColor(t.id)}` }, lab);
+    el("span", { text: tokName(t.id) }, lab);
+    el("div", { class: "value", text: fmt0.format(ft.typical[li]) }, d);
+    el("div", { class: "muted", text: `typical-task tokens · ${fmt2.format(cpt(t.id, state.agg)[li])} chars/token` }, d);
+  }
+  const detail = taskDetail(data, li, vals(state.primary, state.agg)).filter((r) => Number.isFinite(r.ratio) && r.value >= 10);
+  const link = (r) => {
+    const a = el("a", { href: `https://rosettacode.org/wiki/${encodeURIComponent(data.tasks[r.task].replace(/-/g, "_"))}`, target: "_blank", rel: "noopener", text: data.tasks[r.task] });
+    return a;
+  };
+  const cols = [
+    { label: "Task", align: "l", get: link },
+    { label: name, get: (r) => fmt0.format(r.value) },
+    { label: "Task median", get: (r) => fmt0.format(r.taskMedian) },
+    { label: "Ratio", get: (r) => fmt2.format(r.ratio) + "×" },
+  ];
+  makeTable($("detail-best"), cols, detail.slice(0, 25));
+  makeTable($("detail-worst"), cols, detail.slice(-25).reverse());
+}
+
+// Method ----------------------------------------------------------------------
+(function method() {
+  const ul = $("method-list");
+  const items = [
+    ["Dataset: RosettaCodeData commit ", { text: data.meta.commit, href: data.meta.commitUrl },
+      ` (${data.meta.commitDate}), ${fmt0.format(data.meta.files)} non-empty solution files (${fmt0.format(data.meta.uniqueFiles)} unique), ${fmt0.format(data.langs.length)} languages, ${fmt0.format(data.tasks.length)} tasks.`],
+    "Unit: one task/language pair. RosettaCode often has several variant solutions per pair. “First solution” uses variant 1. “Mean of variants” averages all variants.",
+    "The first section averages tokens over the tasks solved by every selected language.",
+    "Sections 2 to 4 use all pairs. Each language gets a two-way fixed-effects fit on log token counts (task + language) by alternating means. “Typical task” = exp(language effect + mean task effect). Standard error = the language's residual sd / √n. The “plain mean” column shows the unadjusted average for comparison.",
+    ...AVAIL.map((t) => [`${tokName(t.id)}: `, { text: t.source, href: t.sourceUrl }, `. Covers ${t.covers}.` +
+      (t.overhead !== undefined ? ` count_tokens adds ${t.overhead} framing tokens per message. These were subtracted, with the framing measured as count("x") − 1.` : "")]),
+    "Text is counted exactly as stored: UTF-8 with replacement for invalid bytes, no special tokens, no normalization beyond each tokenizer's own.",
+    "RosettaCode solutions vary in style, completeness and comment density, and some include embedded data. The result describes this corpus, not a controlled experiment.",
+  ];
+  for (const item of items) {
+    const li = el("li", {}, ul);
+    for (const part of [].concat(item)) {
+      if (typeof part === "string") li.append(part);
+      else el("a", { href: part.href, text: part.text }, li);
+    }
+  }
+})();
+
+function renderAll() { renderReplication(); renderRanking(); renderCompare(); renderDetail(); }
+const themeParam = new URLSearchParams(location.search).get("theme");
+if (themeParam === "light" || themeParam === "dark") $("theme").querySelector(`[data-v=${themeParam}]`).click();
+renderAll();
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderReplication(); renderCompare(); }, 150); });
+</script>
+</body>
+</html>
